@@ -8,36 +8,73 @@
 # TODO: add noise functions, plot results at different noise levels.
 # TODO: observe training signal under these different noise levels
 
+# COMMENTS:
+# converves at low or extereme noise levels with epochs higher than HyQNN. Why was their epochs so limited
+
+
 import pennylane as qml
 # import qiskit
 # import qiskit.providers.aer.noise as noise
 from pennylane_cirq import ops as cirq_ops
 from pennylane import numpy as np
 from pennylane.optimize import NesterovMomentumOptimizer
+import matplotlib.pyplot as plt
 
 ####################
 # Params
-epochs = 100 # number of epochs to train over
+epochs = 300 # number of epochs to train over
 noise_params = [qml.BitFlip, qml.PhaseFlip, qml.PhaseDamping, qml.AmplitudeDamping, qml.DepolarizingChannel]
 step_size = 0.01 # nesterov step size
 num_qubits = 2 # number of wires in system
-num_layers = 12 # number of VQC layers in system
+num_layers = 3 # number of VQC layers in system
+
+# NOISE:
+# noise = qml.AmplitudeDamping
+noise = cirq_ops.BitFlip
+noise_prob = 0.2
+
+# TRAIN SETTINGS
+opt = NesterovMomentumOptimizer(step_size)
+batch_size = 30
+
+# training graphs
+train_acc = []
+val_acc = []
+loss = []
 
 print(np.linspace(0, num_qubits, num_qubits))
 # quantum device for running circuits
 # dev = qml.device("cirq.mixedsimulator")
-dev = qml.device("default.mixed")
+# dev = qml.device("default.mixed") # pennylane noise
+dev3 = qml.device("cirq.mixedsimulator", wires=2)
+
+
+def state_preparation(a):
+    qml.RY(a[0], wires=0)
+
+    qml.CNOT(wires=[0, 1])
+    qml.RY(a[1], wires=1)
+    qml.CNOT(wires=[0, 1])
+    qml.RY(a[2], wires=1)
+
+    qml.PauliX(wires=0)
+    qml.CNOT(wires=[0, 1])
+    qml.RY(a[3], wires=1)
+    qml.CNOT(wires=[0, 1])
+    qml.RY(a[4], wires=1)
+    qml.PauliX(wires=0)
 
 
 def layer(layer_weights):
     for wire in range(num_qubits):
         qml.Rot(*layer_weights[wire], wires=wire)
+        noise(noise_prob, wire) # apply noise with prob p to each wire after each gate
     qml.CNOT(wires=[0, 1])
 
 # VQC structure
-@qml.qnode(dev)
+@qml.qnode(dev3)
 def circuit(weights, x):
-    qml.StatePrep(x, wires=np.linspace(0, num_qubits, num_qubits))
+    state_preparation(x)
 
     for layer_weights in weights:
         layer(layer_weights)
@@ -60,70 +97,24 @@ def accuracy(labels, predictions):
     acc = acc / len(labels)
     return acc
 
-# def cost(weights, bias, X, Y):
-#     # Transpose the batch of input data in order to make the indexing
-#     # in state_preparation work
-#     predictions = variational_classifier(weights, bias, X.T)
-#     return square_loss(Y, predictions)
 
 def cost(weights, bias, X, Y):
-    predictions = [variational_classifier(weights, bias, x) for x in X]
+    # Transpose the batch of input data in order to make the indexing
+    # in state_preparation work
+    predictions = variational_classifier(weights, bias, X.T)
     return square_loss(Y, predictions)
 
 
 # iris classication
 
-# def get_angles(x):
-#     beta0 = 2 * np.arcsin(np.sqrt(x[1] ** 2) / np.sqrt(x[0] ** 2 + x[1] ** 2 + 1e-12))
-#     beta1 = 2 * np.arcsin(np.sqrt(x[3] ** 2) / np.sqrt(x[2] ** 2 + x[3] ** 2 + 1e-12))
-#     beta2 = 2 * np.arcsin(np.linalg.norm(x[2:]) / np.linalg.norm(x))
+def get_angles(x):
+    beta0 = 2 * np.arcsin(np.sqrt(x[1] ** 2) / np.sqrt(x[0] ** 2 + x[1] ** 2 + 1e-12))
+    beta1 = 2 * np.arcsin(np.sqrt(x[3] ** 2) / np.sqrt(x[2] ** 2 + x[3] ** 2 + 1e-12))
+    beta2 = 2 * np.arcsin(np.linalg.norm(x[2:]) / np.linalg.norm(x))
 
-#     return np.array([beta2, -beta1 / 2, beta1 / 2, -beta0 / 2, beta0 / 2])
-
-
-##############################################################################
-# Let’s test if this routine actually works.
-
-# x = np.array([0.53896774, 0.79503606, 0.27826503, 0.0], requires_grad=False)
-# ang = get_angles(x)
+    return np.array([beta2, -beta1 / 2, beta1 / 2, -beta0 / 2, beta0 / 2])
 
 
-# @qml.qnode(dev)
-# def test(angles):
-#     qml.StatePrep(angles, wires=np.linspace(0, num_qubits, num_qubits))
-
-#     return qml.state()
-
-
-# state = test(ang)
-
-# print("x               : ", np.round(x, 6))
-# print("angles          : ", np.round(ang, 6))
-# print("amplitude vector: ", np.round(np.real(state), 6))
-
-
-
-##############################################################################
-# Data
-# ~~~~
-#
-# We load the Iris data set. There is a bit of preprocessing to do in
-# order to encode the inputs into the amplitudes of a quantum state. We will augment the
-# data points by two so-called "latent dimensions", making the size of the padded data point
-# match the size of the state vector in the quantum device. We then need
-# to normalize the data points, and finally, we translate the inputs x to rotation
-# angles using the ``get_angles`` function we defined above.
-#
-# Data preprocessing should always be done with the problem in mind; for example, if we do not 
-# add any latent dimensions, normalization erases any information on the length of the vectors and 
-# classes separated by this feature will not be distinguishable.
-#
-# .. note::
-#
-#     The Iris dataset can be downloaded
-#     :html:`<a href="https://raw.githubusercontent.com/XanaduAI/qml/master/_static/demonstration_assets/variational_classifier/data/iris_classes1and2_scaled.txt"
-#     download=parity.txt target="_blank">here</a>` and should be placed
-#     in the subfolder ``variational_classifer/data``.
 
 data = np.loadtxt("variational_classifier/data/iris_classes1and2_scaled.txt")
 X = data[:, 0:2]
@@ -140,57 +131,18 @@ X_norm = (X_pad.T / normalization).T
 print(f"First X sample (normalized): {X_norm[0]}")
 
 # the angles for state preparation are the features
-features = np.array([x for x in X_norm], requires_grad=False)
+features = np.array([get_angles(x) for x in X_norm], requires_grad=False)
 print(f"First features sample      : {features[0]}")
 
 Y = data[:, -1]
-
-
-##############################################################################
-# These angles are our new features, which is why we have renamed X to
-# “features” above. Let’s plot the stages of preprocessing and play around
-# with the dimensions (dim1, dim2). Some of them still separate the
-# classes well, while others are less informative.
-
-
-# plt.figure()
-# plt.scatter(X[:, 0][Y == 1], X[:, 1][Y == 1], c="b", marker="o", ec="k")
-# plt.scatter(X[:, 0][Y == -1], X[:, 1][Y == -1], c="r", marker="o", ec="k")
-# plt.title("Original data")
-# plt.show()
-
-# plt.figure()
-# dim1 = 0
-# dim2 = 1
-# plt.scatter(X_norm[:, dim1][Y == 1], X_norm[:, dim2][Y == 1], c="b", marker="o", ec="k")
-# plt.scatter(X_norm[:, dim1][Y == -1], X_norm[:, dim2][Y == -1], c="r", marker="o", ec="k")
-# plt.title(f"Padded and normalised data (dims {dim1} and {dim2})")
-# plt.show()
-
-# plt.figure()
-# dim1 = 0
-# dim2 = 3
-# plt.scatter(features[:, dim1][Y == 1], features[:, dim2][Y == 1], c="b", marker="o", ec="k")
-# plt.scatter(features[:, dim1][Y == -1], features[:, dim2][Y == -1], c="r", marker="o", ec="k")
-# plt.title(f"Feature vectors (dims {dim1} and {dim2})")
-# plt.show()
-
-import matplotlib.pyplot as plt
-
-##############################################################################
-# This time we want to generalize from the data samples. This means that we want
-# to train our model on one set of data and test its performance on a second set
-# of data that has not been used in training. To monitor the
-# generalization performance, the data is split into training and
-# validation set.
 
 np.random.seed(0)
 num_data = len(Y)
 num_train = int(0.75 * num_data)
 index = np.random.permutation(range(num_data))
-feats_train = X_norm[index[:num_train]]
+feats_train = features[index[:num_train]]
 Y_train = Y[index[:num_train]]
-feats_val = X_norm[index[num_train:]]
+feats_val = features[index[num_train:]]
 Y_val = Y[index[num_train:]]
 
 # We need these later for plotting
@@ -206,8 +158,10 @@ X_val = X[index[num_train:]]
 weights_init = 0.01 * np.random.randn(num_layers, num_qubits, 3, requires_grad=True)
 bias_init = np.array(0.0, requires_grad=True)
 
-opt = NesterovMomentumOptimizer(step_size) # cost opt function
-batch_size = 5
+##############################################################################
+# Again we minimize the cost, using the imported optimizer.
+
+
 
 # train the variational classifier
 weights = weights_init
@@ -220,22 +174,47 @@ for it in range(epochs):
     weights, bias, _, _ = opt.step(cost, weights, bias, feats_train_batch, Y_train_batch)
 
     # Compute predictions on train and validation set
-    # predictions_train = np.sign(variational_classifier(weights, bias, feats_train.T))
-    # predictions_val = np.sign(variational_classifier(weights, bias, feats_val.T))
-    predictions_train = np.sign([variational_classifier(weights, bias, x) for x in feats_train])
-    predictions_val = np.sign([variational_classifier(weights, bias, x) for x in feats_val])
+    predictions_train = np.sign(variational_classifier(weights, bias, feats_train.T))
+    predictions_val = np.sign(variational_classifier(weights, bias, feats_val.T))
 
     # Compute accuracy on train and validation set
     acc_train = accuracy(Y_train, predictions_train)
     acc_val = accuracy(Y_val, predictions_val)
 
-    if (it + 1) % 2 == 0:
+    if True: # changed from logging every 2nd one
         _cost = cost(weights, bias, features, Y)
         print(
             f"Iter: {it + 1:5d} | Cost: {_cost:0.7f} | "
             f"Acc train: {acc_train:0.7f} | Acc validation: {acc_val:0.7f}"
         )
+        train_acc.append(acc_train)
+        val_acc.append(acc_val)
+        loss.append(_cost)
 
+
+
+# plot
+epochs_logged = range(1, epochs + 1, 1) 
+
+plt.figure(figsize=(10,6))
+plt.ylim(0,1.1)
+plt.plot(epochs_logged, train_acc, label="Train Accuracy")
+plt.plot(epochs_logged, val_acc, label="Validation Accuracy")
+plt.xlabel("Epoch")
+plt.ylabel("Accuracy")
+plt.title(f"Training and Validation Accuracy over Epochs. Noise:{noise}, Prob:{noise_prob}")
+plt.legend()
+plt.grid(True)
+plt.show()
+
+plt.figure(figsize=(10,6))
+plt.plot(epochs_logged, loss, label="Loss", color="red")
+plt.xlabel("Epoch")
+plt.ylabel("Loss")
+plt.title(f"Training Loss over Epochs. Noise:{noise}, Prob:{noise_prob}")
+plt.legend()
+plt.grid(True)
+plt.show()
 
 ##############################################################################
 # We can plot the continuous output of the variational classifier for the
@@ -253,7 +232,7 @@ padding = 0.1 * np.ones((len(X_grid), 2))
 X_grid = np.c_[X_grid, padding]  # pad each input
 normalization = np.sqrt(np.sum(X_grid**2, -1))
 X_grid = (X_grid.T / normalization).T  # normalize each input
-features_grid = np.array([x for x in X_grid])  # angles are new features
+features_grid = np.array([get_angles(x) for x in X_grid])  # angles are new features
 predictions_grid = variational_classifier(weights, bias, features_grid.T)
 Z = np.reshape(predictions_grid, xx.shape)
 

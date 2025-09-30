@@ -12,7 +12,7 @@ epochs = 100
 # minimal VQC with noisy results
 
 # quantum device for running circuits
-dev = qml.device("cirq.mixedsimulator", wires=2)
+dev = qml.device("default.mixed", wires=2)
 
 def state_preparation(a):
     qml.RY(a[0], wires=0)
@@ -42,8 +42,7 @@ def state_preparation(a):
 def layer(layer_weights):
     for wire in range(wire_cnt):
         qml.Rot(*layer_weights[wire], wires=wire)
-        if wire == 0:
-            cirq_ops.BitFlip(0.2, wire)
+        qml.BitFlip(0.1, wire)
     qml.CNOT(wires=[0, 1])
 
 # VQC structure
@@ -194,13 +193,16 @@ num_layers = 6
 weights_init = 0.01 * np.random.randn(num_layers, num_qubits, 3, requires_grad=True)
 bias_init = np.array(0.0, requires_grad=True)
 
-opt = NesterovMomentumOptimizer(0.01) # cost opt function
+##############################################################################
+# Again we minimize the cost, using the imported optimizer.
+
+opt = NesterovMomentumOptimizer(0.01)
 batch_size = 5
 
 # train the variational classifier
 weights = weights_init
 bias = bias_init
-for it in range(epochs):
+for it in range(60):
     # Update the weights by one optimizer step
     batch_index = np.random.randint(0, num_train, (batch_size,))
     feats_train_batch = feats_train[batch_index]
