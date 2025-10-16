@@ -15,40 +15,58 @@
 import pennylane as qml
 # import qiskit
 # import qiskit.providers.aer.noise as noise
-from pennylane_cirq import ops as cirq_ops
+# from pennylane_cirq import ops as cirq_ops
 from pennylane import numpy as np
 from pennylane.optimize import NesterovMomentumOptimizer
 import matplotlib.pyplot as plt
+# from pennylane_qiskit import load_noise_model  # or use qml.from_qiskit_noise
+
+from qiskit_ibm_runtime import QiskitRuntimeService
+from qiskit.providers.fake_provider import GenericBackendV2
+from qiskit_aer.noise import NoiseModel
+
+####################
+# Qiskit noise model
+service = QiskitRuntimeService()
+# backend = GenericBackendV2(num_qubits=2, seed=42)
+backend = service.backend("ibm_brisbane")
+noise_model = NoiseModel.from_backend(backend)
+# pl_noise = qml.from_qiskit_noise(noise_model)
+# print(pl_noise)
+
 
 ####################
 # Params
-epochs = 400 # number of epochs to train over
+epochs = 100 # number of epochs to train over
 noise_params = [qml.BitFlip, qml.PhaseFlip, qml.PhaseDamping, qml.AmplitudeDamping, qml.DepolarizingChannel]
 step_size = 0.01 # nesterov step size
 num_qubits = 2 # number of wires in system
-num_layers = 12 # number of VQC layers in system
+num_layers = 5 # number of VQC layers in system
 
 # NOISE:
-noise = qml.BitFlip
-# noise = cirq_ops.BitFlip # uncomment if want to use other noise model, make sure to do device too
-noise_prob = 0.1
+noise = qml.AmplitudeDamping
+# noise = cirq_ops.BitFlip
+noise_prob = 0.3
 
 # TRAIN SETTINGS
 opt = NesterovMomentumOptimizer(step_size)
 batch_size = 5
 
-# training graphs
+# training graphs 
 train_acc = []
 val_acc = []
 loss = []
 
-print(np.linspace(0, num_qubits, num_qubits))
+# print(np.linspace(0, num_qubits, num_qubits))
 # quantum device for running circuits
 # dev = qml.device("cirq.mixedsimulator")
-dev3 = qml.device("default.mixed") # pennylane noise
+# dev = qml.device("default.mixed") # pennylane noise
 # dev3 = qml.device("cirq.mixedsimulator", wires=2)
+# dev_noisy = qml.device("qiskit.aer", wires=num_qubits, noise_model=noise_model, shots=10) # qiskit
+dev_noisy = qml.device("qiskit.aer", wires=num_qubits, shots=10) # qiskit
 
 
+# angle encoding
 def state_preparation(a):
     qml.RY(a[0], wires=0)
 
@@ -68,15 +86,14 @@ def state_preparation(a):
 def layer(layer_weights):
     for wire in range(num_qubits):
         qml.Rot(*layer_weights[wire], wires=wire)
-        noise(noise_prob, wires=wire)  # noisy single-qubit gates
-
+        # noise(noise_prob, wire) # apply noise with prob p to each wire after each gate
     qml.CNOT(wires=[0, 1])
-    noise(noise_prob, wires=0)  # noisy two-qubit gate
-    noise(noise_prob, wires=1)
+    # noise(noise_prob, 0) # apply noise with prob p to each wire after each gate
+    # noise(noise_prob, 1) # apply noise with prob p to each wire after each gate
 
 
 # VQC structure
-@qml.qnode(dev3)
+@qml.qnode(dev_noisy)
 def circuit(weights, x):
     state_preparation(x)
 
@@ -84,6 +101,10 @@ def circuit(weights, x):
         layer(layer_weights)
 
     return qml.expval(qml.PauliZ(0))
+
+# add calibrated noise
+# pl_ideal_circ = qml.QNode(circuit, dev)
+# pl_noisy_circ = qml.add_noise(pl_ideal_circ, noise_model=pl_noise)
 
 # sum of output of circuit + trainable bias
 def variational_classifier(weights, bias, x):
@@ -140,6 +161,7 @@ print(f"First features sample      : {features[0]}")
 
 Y = data[:, -1]
 
+# extract training data
 np.random.seed(0)
 num_data = len(Y)
 num_train = int(0.75 * num_data)
@@ -155,9 +177,17 @@ X_val = X[index[num_train:]]
 
 ##############################################################################
 # Optimization
+# ~~~~~~~~~~~~
+#
+# First we initialize the variables.
 
 weights_init = 0.01 * np.random.randn(num_layers, num_qubits, 3, requires_grad=True)
 bias_init = np.array(0.0, requires_grad=True)
+
+##############################################################################
+# Again we minimize the cost, using the imported optimizer.
+
+
 
 # train the variational classifier
 weights = weights_init
@@ -198,7 +228,8 @@ plt.plot(epochs_logged, train_acc, label="Train Accuracy")
 plt.plot(epochs_logged, val_acc, label="Validation Accuracy")
 plt.xlabel("Epoch")
 plt.ylabel("Accuracy")
-plt.title(f"Training and Validation Accuracy over Epochs. Noise:{noise}, Prob:{noise_prob}")
+# plt.title(f"Training and Validation Accuracy over Epochs. Noise:{noise}, Prob:{noise_prob}")
+plt.title(f"Training and Validation Accuracy over Epochs. Qiskit Brisbane Noise")
 plt.legend()
 plt.grid(True)
 plt.show()
@@ -207,10 +238,16 @@ plt.figure(figsize=(10,6))
 plt.plot(epochs_logged, loss, label="Loss", color="red")
 plt.xlabel("Epoch")
 plt.ylabel("Loss")
-plt.title(f"Training Loss over Epochs. Noise:{noise}, Prob:{noise_prob}")
+# plt.title(f"Training Loss over Epochs. Noise:{noise}, Prob:{noise_prob}")
+plt.title(f"Training Loss over Epochs. Qiskit Brisbane Noise")
 plt.legend()
 plt.grid(True)
 plt.show()
+
+##############################################################################
+# We can plot the continuous output of the variational classifier for the
+# first two dimensions of the Iris data set.
+
 plt.figure()
 cm = plt.cm.RdBu
 
@@ -244,3 +281,4 @@ for color, label in zip(["b", "r"], [1, -1]):
 
 plt.legend()
 plt.show()
+
