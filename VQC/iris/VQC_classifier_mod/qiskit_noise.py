@@ -62,8 +62,8 @@ loss = []
 # dev = qml.device("cirq.mixedsimulator")
 # dev = qml.device("default.mixed") # pennylane noise
 # dev3 = qml.device("cirq.mixedsimulator", wires=2)
-# dev_noisy = qml.device("qiskit.aer", wires=num_qubits, noise_model=noise_model, shots=10) # qiskit
-dev_noisy = qml.device("qiskit.aer", wires=num_qubits, shots=10) # qiskit
+dev_noisy = qml.device("qiskit.aer", wires=num_qubits, noise_model=noise_model, shots=100) # qiskit
+# dev_noisy = qml.device("qiskit.aer", wires=num_qubits, shots=100) # qiskit
 
 
 # angle encoding
