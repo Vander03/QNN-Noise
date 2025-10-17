@@ -62,8 +62,8 @@ loss = []
 # dev = qml.device("cirq.mixedsimulator")
 # dev = qml.device("default.mixed") # pennylane noise
 # dev3 = qml.device("cirq.mixedsimulator", wires=2)
-dev_noisy = qml.device("qiskit.aer", wires=num_qubits, noise_model=noise_model, shots=100) # qiskit
-# dev_noisy = qml.device("qiskit.aer", wires=num_qubits, shots=100) # qiskit
+# dev_noisy = qml.device("qiskit.aer", wires=num_qubits, noise_model=noise_model, shots=100) # qiskit
+dev_noisy = qml.device("qiskit.aer", wires=num_qubits, shots=100) # qiskit
 
 
 # angle encoding
@@ -229,7 +229,9 @@ plt.plot(epochs_logged, val_acc, label="Validation Accuracy")
 plt.xlabel("Epoch")
 plt.ylabel("Accuracy")
 # plt.title(f"Training and Validation Accuracy over Epochs. Noise:{noise}, Prob:{noise_prob}")
-plt.title(f"Training and Validation Accuracy over Epochs. Qiskit Brisbane Noise")
+# plt.title(f"Training and Validation Accuracy over Epochs. Qiskit Brisbane Noise")
+plt.title(f"Training and Validation Accuracy over Epochs. Noiseless")
+
 plt.legend()
 plt.grid(True)
 plt.show()
@@ -239,7 +241,8 @@ plt.plot(epochs_logged, loss, label="Loss", color="red")
 plt.xlabel("Epoch")
 plt.ylabel("Loss")
 # plt.title(f"Training Loss over Epochs. Noise:{noise}, Prob:{noise_prob}")
-plt.title(f"Training Loss over Epochs. Qiskit Brisbane Noise")
+# plt.title(f"Training Loss over Epochs. Qiskit Brisbane Noise")
+plt.title(f"Training Loss over Epochs. Noiseless")
 plt.legend()
 plt.grid(True)
 plt.show()
